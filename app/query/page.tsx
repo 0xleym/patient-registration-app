@@ -32,6 +32,9 @@ export default function QueryPage() {
     syncDatabase,
   } = useDatabase();
   const [query, setQuery] = useState("SELECT * FROM patients LIMIT 10");
+  const [lastExecutedQuery, setLastExecutedQuery] = useState<string | null>(
+    null
+  );
   const [results, setResults] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -50,6 +53,7 @@ export default function QueryPage() {
 
     try {
       const queryResults = await executeQuery(query);
+      setLastExecutedQuery(query);
       setResults(queryResults);
 
       if (queryResults.length === 0) {
@@ -76,13 +80,15 @@ export default function QueryPage() {
     setIsSyncing(true);
     try {
       await syncDatabase();
-      if (results) {
-        const queryResults = await executeQuery(query);
+      // Only re-execute if the last executed query was a safe read-only SELECT
+      if (
+        results &&
+        lastExecutedQuery &&
+        lastExecutedQuery.trim().toLowerCase().startsWith("select")
+      ) {
+        const queryResults = await executeQuery(lastExecutedQuery);
         setResults(queryResults);
       }
-    //   toast.success("Sync Complete", {
-    //     description: "Database has been synchronized with other tabs.",
-    //   });
     } catch (error) {
       console.error("Error during manual sync:", error);
       toast.error("Sync Failed", {
@@ -93,27 +99,9 @@ export default function QueryPage() {
     }
   };
 
-  const refreshQueryResults = async () => {
-    if (!query.trim().toLowerCase().startsWith("select")) {
-      return;
-    }
-
-    if (!initialized || isExecuting) {
-      return;
-    }
-
-    try {
-      console.log("Refreshing query results...");
-      handleSync();  
-    } catch (error) {
-      console.error("Error refreshing query results:", error);
-    }
-  };
-
   useEffect(() => {
-    const handleDatabaseUpdate = (event: Event) => {
-      const customEvent = event as CustomEvent;
-    handleSync();
+    const handleDatabaseUpdate = () => {
+      handleSync();
     };
 
     window.addEventListener("database-updated", handleDatabaseUpdate);
@@ -121,7 +109,7 @@ export default function QueryPage() {
     return () => {
       window.removeEventListener("database-updated", handleDatabaseUpdate);
     };
-  }, [query, initialized, isExecuting]);
+  }, [lastExecutedQuery, initialized, isExecuting]);
 
   if (dbLoading) {
     return (

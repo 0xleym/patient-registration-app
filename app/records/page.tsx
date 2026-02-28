@@ -31,8 +31,8 @@ type Patient = {
   last_name: string;
   date_of_birth: string;
   gender: string;
-  email: string;
-  phone: string;
+  email: string | null;
+  phone: string | null;
   created_at: string;
 };
 
@@ -116,8 +116,8 @@ export default function RecordsPage() {
     return (
       patient.first_name.toLowerCase().includes(searchLower) ||
       patient.last_name.toLowerCase().includes(searchLower) ||
-      patient.email.toLowerCase().includes(searchLower) ||
-      patient.phone.includes(searchTerm)
+      (patient.email?.toLowerCase().includes(searchLower) ?? false) ||
+      (patient.phone?.includes(searchTerm) ?? false)
     );
   });
 

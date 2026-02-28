@@ -1,7 +1,14 @@
 "use client";
 
 import type React from "react";
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
 import { toast } from "sonner";
 import { BroadcastChannel } from "broadcast-channel";
 
@@ -32,23 +39,20 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false);
   const [channel] = useState(() => new BroadcastChannel("patient-db-channel"));
   const dbRef = useRef<Database | null>(null);
+  const initializedRef = useRef(false);
 
   const dumpDatabase = async () => {
     if (!dbRef.current) return;
 
-    try {
-      const patients = await dbRef.current.query("SELECT * FROM patients");
+    const patients = await dbRef.current.query("SELECT * FROM patients");
 
-      const maxId = patients.rows.reduce((max: number, patient: any) => {
-        return Math.max(max, parseInt(patient.id));
-      }, 0);
+    const maxId = patients.rows.reduce((max: number, patient: any) => {
+      return Math.max(max, parseInt(patient.id, 10));
+    }, 0);
 
-      localStorage.setItem(DB_DUMP_KEY, JSON.stringify(patients.rows));
-      localStorage.setItem(DB_DUMP_TIMESTAMP_KEY, Date.now().toString());
-      localStorage.setItem(DB_LAST_ID_KEY, maxId.toString());
-    } catch (error) {
-      console.error("Error dumping database:", error);
-    }
+    localStorage.setItem(DB_DUMP_KEY, JSON.stringify(patients.rows));
+    localStorage.setItem(DB_DUMP_TIMESTAMP_KEY, Date.now().toString());
+    localStorage.setItem(DB_LAST_ID_KEY, maxId.toString());
   };
 
   const restoreDatabase = async () => {
@@ -74,36 +78,46 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
-      await dbRef.current.query("DELETE FROM patients");
+      await dbRef.current.query("BEGIN");
 
-      for (const patient of patients) {
+      try {
+        await dbRef.current.query("DELETE FROM patients");
+
+        for (const patient of patients) {
+          await dbRef.current.query(
+            `INSERT INTO patients (
+              id, first_name, last_name, date_of_birth, gender, 
+              email, phone, address, medical_history, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              patient.id,
+              patient.first_name,
+              patient.last_name,
+              patient.date_of_birth,
+              patient.gender,
+              patient.email,
+              patient.phone,
+              patient.address,
+              patient.medical_history,
+              patient.created_at,
+            ]
+          );
+        }
+
+        const lastId = lastIdStr || "0";
+        const nextId = parseInt(lastId, 10) + 1;
+
         await dbRef.current.query(
-          `INSERT INTO patients (
-            id, first_name, last_name, date_of_birth, gender, 
-            email, phone, address, medical_history, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          ON CONFLICT (id) DO NOTHING`,
-          [
-            patient.id,
-            patient.first_name,
-            patient.last_name,
-            patient.date_of_birth,
-            patient.gender,
-            patient.email,
-            patient.phone,
-            patient.address,
-            patient.medical_history,
-            patient.created_at,
-          ]
+          `SELECT setval('patients_id_seq', $1, false)`,
+          [nextId]
         );
+
+        await dbRef.current.query("COMMIT");
+      } catch (txError) {
+        await dbRef.current.query("ROLLBACK");
+        throw txError;
       }
-
-      const lastId = localStorage.getItem(DB_LAST_ID_KEY) || "0";
-      const nextId = parseInt(lastId) + 1;
-
-      await dbRef.current.query(`SELECT setval('patients_id_seq', $1, false)`, [
-        nextId,
-      ]);
 
       return true;
     } catch (error) {
@@ -112,8 +126,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const syncDatabase = async () => {
-    if (!dbRef.current || !initialized) return;
+  const syncDatabase = useCallback(async () => {
+    if (!dbRef.current || !initializedRef.current) return;
 
     try {
       setIsLoading(true);
@@ -139,7 +153,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const ensureLocalStorageData = async () => {
     if (!dbRef.current) return;
@@ -200,24 +214,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         await restoreDatabase();
         await ensureLocalStorageData();
 
+        initializedRef.current = true;
         setInitialized(true);
         setIsLoading(false);
-
-        channel.onmessage = async (message) => {
-          if (message.type === "db-updated") {
-            setTimeout(async () => {
-              await syncDatabase();
-              const event = new CustomEvent("database-updated", {
-                detail: message.detail,
-              });
-
-              window.dispatchEvent(event);
-              //   toast("Database Updated", {
-              //     description: `Patient data has been ${message.detail.action}ed in another tab.`,
-              //   });
-            }, 300);
-          }
-        };
       } catch (error) {
         console.error("Failed to initialize database:", error);
         toast.error("Database Error", {
@@ -235,16 +234,30 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     };
   }, [channel]);
 
+  useEffect(() => {
+    channel.onmessage = async (message) => {
+      if (message.type === "db-updated") {
+        setTimeout(async () => {
+          await syncDatabase();
+          const event = new CustomEvent("database-updated", {
+            detail: message.detail,
+          });
+          window.dispatchEvent(event);
+        }, 300);
+      }
+    };
+  }, [channel, syncDatabase]);
+
   const executeQuery = async (
     sql: string,
     params: any[] = []
   ): Promise<any[]> => {
-    if (!db) {
+    if (!dbRef.current) {
       throw new Error("Database not initialized");
     }
 
     try {
-      const result = await db.query(sql, params);
+      const result = await dbRef.current.query(sql, params);
 
       const sqlLower = sql.trim().toLowerCase();
       let actionType = null;
@@ -264,18 +277,26 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         const tableName = tableMatch
           ? tableMatch[1] || tableMatch[2] || tableMatch[3]
           : "unknown";
-        await dumpDatabase();
 
-        const message = {
-          type: "db-updated",
-          detail: {
-            table: tableName,
-            action: actionType,
-            timestamp: new Date().getTime(),
-          },
-        };
+        try {
+          await dumpDatabase();
 
-        channel.postMessage(message);
+          const message = {
+            type: "db-updated",
+            detail: {
+              table: tableName,
+              action: actionType,
+              timestamp: new Date().getTime(),
+            },
+          };
+
+          channel.postMessage(message);
+        } catch (dumpError) {
+          console.error(
+            "Failed to dump database after mutation; skipping cross-tab broadcast:",
+            dumpError
+          );
+        }
       }
 
       return result.rows;
