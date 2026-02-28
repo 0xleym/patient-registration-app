@@ -227,27 +227,28 @@ export default function RegisterPage() {
     try {
       const formattedDate = format(data.dateOfBirth, "yyyy-MM-dd");
 
-      await executeQuery(`
-        INSERT INTO patients (
-          first_name, 
-          last_name, 
-          date_of_birth, 
-          gender, 
-          email, 
-          phone, 
-          address, 
+      await executeQuery(
+        `INSERT INTO patients (
+          first_name,
+          last_name,
+          date_of_birth,
+          gender,
+          email,
+          phone,
+          address,
           medical_history
-        ) VALUES (
-          '${data.firstName}', 
-          '${data.lastName}', 
-          '${formattedDate}', 
-          '${data.gender}', 
-          '${data.email || ""}', 
-          '${data.phone || ""}', 
-          '${data.address || ""}', 
-          '${data.medicalHistory || ""}'
-        )
-      `);
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          data.firstName,
+          data.lastName,
+          formattedDate,
+          data.gender,
+          data.email || "",
+          data.phone || "",
+          data.address || "",
+          data.medicalHistory || "",
+        ]
+      );
 
       toast.success("Patient Registered", {
         description: "The patient has been successfully registered.",
