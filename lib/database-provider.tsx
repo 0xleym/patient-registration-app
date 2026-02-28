@@ -16,6 +16,7 @@ type Database = any;
 type DatabaseContextType = {
   db: Database | null;
   isLoading: boolean;
+  isSyncing: boolean;
   executeQuery: (sql: string, params?: any[]) => Promise<any[]>;
   initialized: boolean;
   syncDatabase: () => Promise<void>;
@@ -24,6 +25,7 @@ type DatabaseContextType = {
 const DatabaseContext = createContext<DatabaseContextType>({
   db: null,
   isLoading: true,
+  isSyncing: false,
   executeQuery: async () => [],
   initialized: false,
   syncDatabase: async () => {},
@@ -38,6 +40,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
   const [channel] = useState(() => new BroadcastChannel("patient-db-channel"));
+  const [isSyncing, setIsSyncing] = useState(false);
   const dbRef = useRef<Database | null>(null);
   const initializedRef = useRef(false);
 
@@ -47,7 +50,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const patients = await dbRef.current.query("SELECT * FROM patients");
 
     const maxId = patients.rows.reduce((max: number, patient: any) => {
-      return Math.max(max, parseInt(patient.id, 10));
+      const id = parseInt(patient.id, 10);
+      return Math.max(max, Number.isNaN(id) ? 0 : id);
     }, 0);
 
     localStorage.setItem(DB_DUMP_KEY, JSON.stringify(patients.rows));
@@ -105,8 +109,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           );
         }
 
-        const lastId = lastIdStr || "0";
-        const nextId = parseInt(lastId, 10) + 1;
+        const parsedLastId = parseInt(lastIdStr || "0", 10);
+        const nextId = (Number.isNaN(parsedLastId) ? 0 : parsedLastId) + 1;
 
         await dbRef.current.query(
           `SELECT setval('patients_id_seq', $1, false)`,
@@ -130,7 +134,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     if (!dbRef.current || !initializedRef.current) return;
 
     try {
-      setIsLoading(true);
+      setIsSyncing(true);
 
       const lastDumpTimestamp = localStorage.getItem(DB_DUMP_TIMESTAMP_KEY);
 
@@ -151,7 +155,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         description: "Failed to synchronize database with other tabs.",
       });
     } finally {
-      setIsLoading(false);
+      setIsSyncing(false);
     }
   }, []);
 
@@ -168,7 +172,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
         if (patients.rows.length > 0) {
           const maxId = patients.rows.reduce((max: number, patient: any) => {
-            return Math.max(max, parseInt(patient.id));
+            const id = parseInt(patient.id, 10);
+            return Math.max(max, Number.isNaN(id) ? 0 : id);
           }, 0);
 
           localStorage.setItem(DB_DUMP_KEY, JSON.stringify(patients.rows));
@@ -308,7 +313,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DatabaseContext.Provider
-      value={{ db, isLoading, executeQuery, initialized, syncDatabase }}
+      value={{ db, isLoading, isSyncing, executeQuery, initialized, syncDatabase }}
     >
       {children}
     </DatabaseContext.Provider>

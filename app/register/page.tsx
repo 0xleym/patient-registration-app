@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -78,6 +78,14 @@ const CalendarWithDropdowns = ({ field }: CalendarWithDropdownsProps) => {
     field.value ? field.value.getFullYear() : new Date().getFullYear()
   );
 
+  // Sync internal state when field.value changes externally (e.g. form.reset())
+  useEffect(() => {
+    const newDate = field.value || new Date();
+    setDate(newDate);
+    setMonth(newDate.getMonth());
+    setYear(newDate.getFullYear());
+  }, [field.value]);
+
   const currentYear = new Date().getFullYear();
   const years = Array.from(
     { length: currentYear - 1899 },
@@ -99,23 +107,35 @@ const CalendarWithDropdowns = ({ field }: CalendarWithDropdownsProps) => {
     "December",
   ];
 
-  const handleYearChange = (selectedYear: string) => {
-    const newYear = parseInt(selectedYear);
-    setYear(newYear);
+  const handleYearChange = useCallback(
+    (selectedYear: string) => {
+      const newYear = parseInt(selectedYear, 10);
+      setYear(newYear);
 
-    const newDate = new Date(date);
-    newDate.setFullYear(newYear);
-    setDate(newDate);
-  };
+      // Clamp day to last valid day of the target month/year to avoid overflow
+      const daysInMonth = new Date(newYear, month + 1, 0).getDate();
+      const clampedDay = Math.min(date.getDate(), daysInMonth);
+      const newDate = new Date(newYear, month, clampedDay);
+      setDate(newDate);
+      field.onChange(newDate);
+    },
+    [date, month, field]
+  );
 
-  const handleMonthChange = (selectedMonth: string) => {
-    const newMonth = parseInt(selectedMonth);
-    setMonth(newMonth);
+  const handleMonthChange = useCallback(
+    (selectedMonth: string) => {
+      const newMonth = parseInt(selectedMonth, 10);
+      setMonth(newMonth);
 
-    const newDate = new Date(date);
-    newDate.setMonth(newMonth);
-    setDate(newDate);
-  };
+      // Clamp day to last valid day of the target month/year to avoid overflow
+      const daysInMonth = new Date(year, newMonth + 1, 0).getDate();
+      const clampedDay = Math.min(date.getDate(), daysInMonth);
+      const newDate = new Date(year, newMonth, clampedDay);
+      setDate(newDate);
+      field.onChange(newDate);
+    },
+    [date, year, field]
+  );
 
   const handleDateSelect = (selectedDate: Date | undefined) => {
     if (selectedDate) {
