@@ -112,12 +112,14 @@ export default function RecordsPage() {
   }, [executeQuery, initialized]);
 
   const filteredPatients = patients.filter((patient) => {
-    const searchLower = searchTerm.toLowerCase();
+    const searchLower = searchTerm.toLowerCase().trim();
+    if (!searchLower) return true;
     return (
       patient.first_name.toLowerCase().includes(searchLower) ||
       patient.last_name.toLowerCase().includes(searchLower) ||
+      (`${patient.first_name} ${patient.last_name}`.toLowerCase().includes(searchLower)) ||
       (patient.email?.toLowerCase().includes(searchLower) ?? false) ||
-      (patient.phone?.includes(searchTerm) ?? false)
+      (patient.phone?.includes(searchTerm.trim()) ?? false)
     );
   });
 
@@ -173,8 +175,30 @@ export default function RecordsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Date of Birth</TableHead>
+                    <TableHead>Gender</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Registered</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 6 }).map((_, j) => (
+                        <TableCell key={j}>
+                          <div className="h-4 w-full rounded bg-muted animate-pulse" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-8">

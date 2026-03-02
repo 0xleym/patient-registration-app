@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, Play, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Loader2, Play, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,44 @@ import {
 } from "@/components/ui/table";
 import { useDatabase } from "@/lib/database-provider";
 
+const BLOCKED_PATTERNS = [
+  { pattern: /^\s*(drop)\s/i, label: "DROP" },
+  { pattern: /^\s*(alter)\s/i, label: "ALTER" },
+  { pattern: /^\s*(truncate)\s/i, label: "TRUNCATE" },
+  { pattern: /^\s*(create)\s/i, label: "CREATE" },
+];
+
+const WARN_PATTERNS = [
+  { pattern: /^\s*delete\s+from\s+\w+\s*;?\s*$/i, label: "DELETE without WHERE clause" },
+  { pattern: /^\s*update\s+\w+\s+set\s+.*(?<!where\s.+)$/i, label: "UPDATE without WHERE clause" },
+];
+
+function validateQuery(sql: string): { allowed: boolean; warning: boolean; message: string } {
+  const trimmed = sql.trim();
+
+  for (const { pattern, label } of BLOCKED_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return {
+        allowed: false,
+        warning: false,
+        message: `${label} statements are blocked in the query interface to protect the database schema.`,
+      };
+    }
+  }
+
+  for (const { pattern, label } of WARN_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return {
+        allowed: true,
+        warning: true,
+        message: `This looks like a ${label}. This will affect all rows in the table.`,
+      };
+    }
+  }
+
+  return { allowed: true, warning: false, message: "" };
+}
+
 export default function QueryPage() {
   const {
     executeQuery,
@@ -39,15 +77,9 @@ export default function QueryPage() {
   const [error, setError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(false);
 
-  async function runQuery() {
-    if (!initialized) {
-      toast.error("Database Error", {
-        description: "Database is not initialized. Please refresh the page.",
-      });
-      return;
-    }
-
+  const executeCurrentQuery = useCallback(async () => {
     setIsExecuting(true);
     setError(null);
 
@@ -73,7 +105,37 @@ export default function QueryPage() {
       });
     } finally {
       setIsExecuting(false);
+      setPendingConfirm(false);
     }
+  }, [query, executeQuery]);
+
+  async function runQuery() {
+    if (!initialized) {
+      toast.error("Database Error", {
+        description: "Database is not initialized. Please refresh the page.",
+      });
+      return;
+    }
+
+    const validation = validateQuery(query);
+
+    if (!validation.allowed) {
+      setError(validation.message);
+      toast.error("Query Blocked", {
+        description: validation.message,
+      });
+      return;
+    }
+
+    if (validation.warning) {
+      setPendingConfirm(true);
+      toast.warning("Dangerous Query", {
+        description: validation.message + " Click 'Confirm Execute' to proceed.",
+      });
+      return;
+    }
+
+    await executeCurrentQuery();
   }
 
   const handleSync = async () => {
@@ -156,21 +218,54 @@ export default function QueryPage() {
         </CardContent>
         <CardFooter className="flex justify-between">
           <div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && (
+              <p className="text-sm text-destructive flex items-center gap-1">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            )}
           </div>
-          <Button onClick={runQuery} disabled={isExecuting}>
-            {isExecuting ? (
+          <div className="flex gap-2">
+            {pendingConfirm && (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Executing...
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" />
-                Run Query
+                <Button
+                  variant="outline"
+                  onClick={() => setPendingConfirm(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={executeCurrentQuery}
+                  disabled={isExecuting}
+                >
+                  {isExecuting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Executing...
+                    </>
+                  ) : (
+                    "Confirm Execute"
+                  )}
+                </Button>
               </>
             )}
-          </Button>
+            {!pendingConfirm && (
+              <Button onClick={runQuery} disabled={isExecuting}>
+                {isExecuting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executing...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Run Query
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </CardFooter>
       </Card>
 
