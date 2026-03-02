@@ -31,9 +31,16 @@ const DatabaseContext = createContext<DatabaseContextType>({
   syncDatabase: async () => {},
 });
 
-const DB_DUMP_KEY = "patient_db_dump";
-const DB_DUMP_TIMESTAMP_KEY = "patient_db_dump_timestamp";
-const DB_LAST_ID_KEY = "patient_db_last_id";
+type BroadcastMessage = {
+  type: "db-mutation";
+  sql: string;
+  params: any[];
+  detail: {
+    table: string;
+    action: string;
+    timestamp: number;
+  };
+};
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<Database | null>(null);
@@ -44,155 +51,30 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const dbRef = useRef<Database | null>(null);
   const initializedRef = useRef(false);
 
-  const dumpDatabase = async () => {
-    if (!dbRef.current) return;
-
-    const patients = await dbRef.current.query("SELECT * FROM patients");
-
-    const maxId = patients.rows.reduce((max: number, patient: any) => {
-      const id = parseInt(patient.id, 10);
-      return Math.max(max, Number.isNaN(id) ? 0 : id);
-    }, 0);
-
-    localStorage.setItem(DB_DUMP_KEY, JSON.stringify(patients.rows));
-    localStorage.setItem(DB_DUMP_TIMESTAMP_KEY, Date.now().toString());
-    localStorage.setItem(DB_LAST_ID_KEY, maxId.toString());
-  };
-
-  const restoreDatabase = async () => {
-    if (!dbRef.current) return false;
-
-    try {
-      const dumpStr = localStorage.getItem(DB_DUMP_KEY);
-      const lastIdStr = localStorage.getItem(DB_LAST_ID_KEY);
-
-      if (!dumpStr || !lastIdStr) {
-        console.log("Missing localStorage data, cannot restore database");
-        return false;
-      }
-
-      let patients;
-      try {
-        patients = JSON.parse(dumpStr);
-      } catch (parseError) {
-        console.error("Error parsing localStorage data:", parseError);
-        localStorage.removeItem(DB_DUMP_KEY);
-        localStorage.removeItem(DB_DUMP_TIMESTAMP_KEY);
-        localStorage.removeItem(DB_LAST_ID_KEY);
-        return false;
-      }
-
-      await dbRef.current.query("BEGIN");
-
-      try {
-        await dbRef.current.query("DELETE FROM patients");
-
-        for (const patient of patients) {
-          await dbRef.current.query(
-            `INSERT INTO patients (
-              id, first_name, last_name, date_of_birth, gender, 
-              email, phone, address, medical_history, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (id) DO NOTHING`,
-            [
-              patient.id,
-              patient.first_name,
-              patient.last_name,
-              patient.date_of_birth,
-              patient.gender,
-              patient.email,
-              patient.phone,
-              patient.address,
-              patient.medical_history,
-              patient.created_at,
-            ]
-          );
-        }
-
-        const parsedLastId = parseInt(lastIdStr || "0", 10);
-        const nextId = (Number.isNaN(parsedLastId) ? 0 : parsedLastId) + 1;
-
-        await dbRef.current.query(
-          `SELECT setval('patients_id_seq', $1, false)`,
-          [nextId]
-        );
-
-        await dbRef.current.query("COMMIT");
-      } catch (txError) {
-        await dbRef.current.query("ROLLBACK");
-        throw txError;
-      }
-
-      return true;
-    } catch (error) {
-      console.error("Error restoring database:", error);
-      return false;
-    }
-  };
-
+  // syncDatabase is now a simple UI reload trigger.
+  // PGlite's IndexedDB is the source of truth — no restore needed.
   const syncDatabase = useCallback(async () => {
     if (!dbRef.current || !initializedRef.current) return;
 
     try {
       setIsSyncing(true);
-
-      const lastDumpTimestamp = localStorage.getItem(DB_DUMP_TIMESTAMP_KEY);
-
-      if (lastDumpTimestamp) {
-        const success = await restoreDatabase();
-        if (success) {
-          toast.success("Database Synced", {
-            description: "Patient data has been synchronized with other tabs.",
-          });
-        }
-      } else {
-        await ensureLocalStorageData();
-        await restoreDatabase();
-      }
+      // Dispatch event so UI components re-fetch their data from PGlite
+      window.dispatchEvent(
+        new CustomEvent("database-updated", {
+          detail: { table: "patients", action: "sync", timestamp: Date.now() },
+        })
+      );
     } catch (error) {
-      console.error("Error syncing database:", error);
+      console.error("Error triggering sync:", error);
       toast.error("Sync Error", {
-        description: "Failed to synchronize database with other tabs.",
+        description: "Failed to trigger data reload.",
       });
     } finally {
       setIsSyncing(false);
     }
   }, []);
 
-  const ensureLocalStorageData = async () => {
-    if (!dbRef.current) return;
-
-    try {
-      const dumpExists = localStorage.getItem(DB_DUMP_KEY);
-      const timestampExists = localStorage.getItem(DB_DUMP_TIMESTAMP_KEY);
-      const lastIdExists = localStorage.getItem(DB_LAST_ID_KEY);
-
-      if (!dumpExists || !timestampExists || !lastIdExists) {
-        const patients = await dbRef.current.query("SELECT * FROM patients");
-
-        if (patients.rows.length > 0) {
-          const maxId = patients.rows.reduce((max: number, patient: any) => {
-            const id = parseInt(patient.id, 10);
-            return Math.max(max, Number.isNaN(id) ? 0 : id);
-          }, 0);
-
-          localStorage.setItem(DB_DUMP_KEY, JSON.stringify(patients.rows));
-          localStorage.setItem(DB_DUMP_TIMESTAMP_KEY, Date.now().toString());
-          localStorage.setItem(DB_LAST_ID_KEY, maxId.toString());
-        } else {
-          console.log(
-            "No patients in database, initializing empty localStorage"
-          );
-          localStorage.setItem(DB_DUMP_KEY, JSON.stringify([]));
-          localStorage.setItem(DB_DUMP_TIMESTAMP_KEY, Date.now().toString());
-          localStorage.setItem(DB_LAST_ID_KEY, "0");
-        }
-      }
-    } catch (error) {
-      console.error("Error ensuring localStorage data:", error);
-    }
-  };
-
+  // Initialize PGlite — it reads from IndexedDB on its own
   useEffect(() => {
     async function initDatabase() {
       try {
@@ -216,9 +98,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           )
         `);
 
-        await restoreDatabase();
-        await ensureLocalStorageData();
-
         initializedRef.current = true;
         setInitialized(true);
         setIsLoading(false);
@@ -239,19 +118,23 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     };
   }, [channel]);
 
+  // Listen for mutations from other tabs and replay them locally
   useEffect(() => {
-    channel.onmessage = async (message) => {
-      if (message.type === "db-updated") {
-        setTimeout(async () => {
-          await syncDatabase();
-          const event = new CustomEvent("database-updated", {
-            detail: message.detail,
-          });
-          window.dispatchEvent(event);
-        }, 300);
+    channel.onmessage = async (message: BroadcastMessage) => {
+      if (message.type === "db-mutation" && dbRef.current && initializedRef.current) {
+        try {
+          await dbRef.current.query(message.sql, message.params);
+          window.dispatchEvent(
+            new CustomEvent("database-updated", {
+              detail: message.detail,
+            })
+          );
+        } catch (error) {
+          console.error("Error replaying mutation from another tab:", error);
+        }
       }
     };
-  }, [channel, syncDatabase]);
+  }, [channel]);
 
   const executeQuery = async (
     sql: string,
@@ -275,6 +158,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         actionType = "delete";
       }
 
+      // Broadcast the mutation to other tabs so they can replay it
       if (actionType) {
         const tableMatch = sqlLower.match(
           /into\s+(\w+)|update\s+(\w+)|from\s+(\w+)/
@@ -284,22 +168,22 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           : "unknown";
 
         try {
-          await dumpDatabase();
-
-          const message = {
-            type: "db-updated",
+          const message: BroadcastMessage = {
+            type: "db-mutation",
+            sql,
+            params,
             detail: {
               table: tableName,
               action: actionType,
-              timestamp: new Date().getTime(),
+              timestamp: Date.now(),
             },
           };
 
           channel.postMessage(message);
-        } catch (dumpError) {
+        } catch (broadcastError) {
           console.error(
-            "Failed to dump database after mutation; skipping cross-tab broadcast:",
-            dumpError
+            "Failed to broadcast mutation to other tabs:",
+            broadcastError
           );
         }
       }
