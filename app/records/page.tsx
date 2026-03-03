@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Loader2, Search, RefreshCw } from "lucide-react";
+import { Loader2, Search, RefreshCw, Upload, FileJson, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useDatabase } from "@/lib/database-provider";
+import { exportToCSV, exportToJSON } from "@/lib/export-utils";
+import { ImportDialog } from "@/components/import-dialog";
 
 type Patient = {
   id: number;
@@ -48,7 +56,45 @@ export default function RecordsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const router = useRouter();
+
+  const handleExport = async (format: "csv" | "json") => {
+    if (!initialized) return;
+
+    setIsExporting(true);
+    try {
+      const results = await executeQuery(`
+        SELECT id, first_name, last_name, date_of_birth, gender, email, phone, address, medical_history, created_at
+        FROM patients
+        ORDER BY id
+      `);
+
+      if (results.length === 0) {
+        toast("No Data", {
+          description: "There are no patients to export.",
+        });
+        return;
+      }
+
+      if (format === "csv") {
+        exportToCSV(results);
+      } else {
+        exportToJSON(results);
+      }
+
+      toast.success("Export Complete", {
+        description: `Exported ${results.length} patient${results.length !== 1 ? "s" : ""} as ${format.toUpperCase()}.`,
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Export Failed", {
+        description: "Failed to export patient data. Please try again.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const loadPatients = async () => {
     if (!initialized) return;
@@ -147,7 +193,7 @@ export default function RecordsPage() {
                 View and manage all registered patients
               </CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="icon"
@@ -169,8 +215,35 @@ export default function RecordsPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={isExporting}>
+                    {isExporting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-2 h-4 w-4" />
+                    )}
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExport("csv")}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("json")}>
+                    <FileJson className="mr-2 h-4 w-4" />
+                    Export as JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <ImportDialog
+                executeQuery={executeQuery}
+                initialized={initialized}
+                onImportComplete={loadPatients}
+              />
               <Link href="/register">
-                <Button>Register New</Button>
+                <Button size="sm">Register New</Button>
               </Link>
             </div>
           </div>
