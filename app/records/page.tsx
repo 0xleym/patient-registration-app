@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Loader2, Search, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -47,6 +48,7 @@ export default function RecordsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const router = useRouter();
 
   const loadPatients = async () => {
     if (!initialized) return;
@@ -234,7 +236,11 @@ export default function RecordsPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredPatients.map((patient) => (
-                    <TableRow key={patient.id}>
+                    <TableRow
+                      key={patient.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/patients/${patient.id}`)}
+                    >
                       <TableCell className="font-medium">
                         {patient.id}
                       </TableCell>
