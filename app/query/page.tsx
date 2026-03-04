@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Play, RefreshCw, ShieldAlert } from "lucide-react";
+import { Loader2, Play, RefreshCw, ShieldAlert, Database } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Table,
@@ -142,7 +139,6 @@ export default function QueryPage() {
     setIsSyncing(true);
     try {
       await syncDatabase();
-      // Only re-execute if the last executed query was a safe read-only SELECT
       if (
         results &&
         lastExecutedQuery &&
@@ -178,50 +174,61 @@ export default function QueryPage() {
       <div className="container flex items-center justify-center min-h-[80vh]">
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p>Initializing database...</p>
+          <p className="text-muted-foreground">Initializing database...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container py-10">
-      <Card className="mb-8">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>SQL Query Interface</CardTitle>
-              <CardDescription>
-                Run custom SQL queries on the patient database
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleSync}
-              disabled={isSyncing}
-              title="Sync with other tabs"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`}
-              />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
+    <div className="container py-10 space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">SQL Query Interface</h1>
+          <p className="text-muted-foreground">
+            Run custom SQL queries against the patient database.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={handleSync}
+          disabled={isSyncing}
+          title="Sync with other tabs"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`}
+          />
+        </Button>
+      </div>
+
+      {/* Query Editor */}
+      <Card>
+        <CardContent className="pt-6">
           <Textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Enter your SQL query here..."
-            className="font-mono min-h-[150px]"
+            className="font-mono min-h-[180px] text-sm bg-muted/30 border-muted"
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                runQuery();
+              }
+            }}
           />
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <div>
-            {error && (
-              <p className="text-sm text-destructive flex items-center gap-1">
+        <CardFooter className="flex justify-between border-t bg-muted/20 px-6 py-3">
+          <div className="flex-1 mr-4">
+            {error ? (
+              <p className="text-sm text-destructive flex items-center gap-1.5">
                 <ShieldAlert className="h-4 w-4 shrink-0" />
                 {error}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Press Ctrl+Enter to run
               </p>
             )}
           </div>
@@ -230,12 +237,14 @@ export default function QueryPage() {
               <>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => setPendingConfirm(false)}
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="destructive"
+                  size="sm"
                   onClick={executeCurrentQuery}
                   disabled={isExecuting}
                 >
@@ -251,7 +260,7 @@ export default function QueryPage() {
               </>
             )}
             {!pendingConfirm && (
-              <Button onClick={runQuery} disabled={isExecuting}>
+              <Button size="sm" onClick={runQuery} disabled={isExecuting}>
                 {isExecuting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -269,45 +278,59 @@ export default function QueryPage() {
         </CardFooter>
       </Card>
 
+      {/* Results */}
       {results && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Query Results</CardTitle>
-            <CardDescription>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Results</h2>
+            <span className="text-sm text-muted-foreground">
               {results.length} {results.length === 1 ? "row" : "rows"} returned
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {results.length > 0 ? (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {Object.keys(results[0]).map((key) => (
-                        <TableHead key={key}>{key}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results.map((row, i) => (
-                      <TableRow key={i}>
-                        {Object.values(row).map((value: any, j) => (
-                          <TableCell key={j}>
-                            {value === null ? "NULL" : String(value)}
-                          </TableCell>
+            </span>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              {results.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {Object.keys(results[0]).map((key) => (
+                          <TableHead key={key} className="font-mono text-xs">
+                            {key}
+                          </TableHead>
                         ))}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <p className="text-center py-4 text-muted-foreground">
-                Query executed successfully, but returned no results.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {results.map((row, i) => (
+                        <TableRow key={i}>
+                          {Object.values(row).map((value: any, j) => (
+                            <TableCell key={j} className="font-mono text-xs">
+                              {value === null ? (
+                                <span className="text-muted-foreground italic">NULL</span>
+                              ) : (
+                                String(value)
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="rounded-full bg-muted p-3 mb-3">
+                    <Database className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Query executed successfully, but returned no results.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
