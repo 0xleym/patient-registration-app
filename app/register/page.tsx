@@ -2,15 +2,15 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
+import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { useDatabase } from "@/lib/database-provider";
 import { PatientForm, PatientFormValues } from "@/components/patient-form";
@@ -87,15 +87,24 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="container py-10">
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Register New Patient</CardTitle>
-          <CardDescription>
-            Enter the patient&apos;s information to register them in the system.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div className="container py-10 max-w-2xl mx-auto space-y-6">
+      {/* Page Header */}
+      <div>
+        <Link href="/records">
+          <Button variant="ghost" size="sm" className="mb-4 -ml-2">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Records
+          </Button>
+        </Link>
+        <h1 className="text-3xl font-bold tracking-tight">Register New Patient</h1>
+        <p className="text-muted-foreground mt-1">
+          Enter the patient&apos;s information to register them in the system.
+        </p>
+      </div>
+
+      {/* Form */}
+      <Card>
+        <CardContent className="pt-6">
           <PatientForm
             onSubmit={onSubmit}
             submitLabel="Register Patient"
