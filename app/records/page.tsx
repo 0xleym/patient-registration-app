@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Loader2, Search, RefreshCw, Upload, FileJson, FileSpreadsheet } from "lucide-react";
+import { Loader2, Search, RefreshCw, Upload, FileJson, FileSpreadsheet, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -122,9 +119,6 @@ export default function RecordsPage() {
     try {
       await syncDatabase();
       await loadPatients();
-      //   toast.success("Sync Complete", {
-      //     description: "Patient data has been synchronized with other tabs.",
-      //   });
     } catch (error) {
       console.error("Error during manual sync:", error);
       toast.error("Sync Failed", {
@@ -147,7 +141,6 @@ export default function RecordsPage() {
         customEvent.detail?.table === "patients" ||
         !customEvent.detail?.table
       ) {
-        console.log("Reloading patients data...");
         handleSync();
       }
     };
@@ -176,167 +169,179 @@ export default function RecordsPage() {
       <div className="container flex items-center justify-center min-h-[80vh]">
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p>Initializing database...</p>
+          <p className="text-muted-foreground">Initializing database...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container py-10">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <CardTitle>Patient Records</CardTitle>
-              <CardDescription>
-                View and manage all registered patients
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleSync}
-                disabled={isSyncing}
-                title="Sync with other tabs"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`}
-                />
+    <div className="container py-10 space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Patient Records</h1>
+          <p className="text-muted-foreground">
+            {patients.length > 0
+              ? `${patients.length} patient${patients.length !== 1 ? "s" : ""} registered`
+              : "View and manage all registered patients"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleSync}
+            disabled={isSyncing}
+            title="Sync with other tabs"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`}
+            />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isExporting}>
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
+                Export
               </Button>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search patients..."
-                  className="pl-8 w-full md:w-[250px]"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={isExporting}>
-                    {isExporting ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="mr-2 h-4 w-4" />
-                    )}
-                    Export
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleExport("csv")}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    Export as CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")}>
-                    <FileJson className="mr-2 h-4 w-4" />
-                    Export as JSON
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <ImportDialog
-                executeQuery={executeQuery}
-                initialized={initialized}
-                onImportComplete={loadPatients}
-              />
-              <Link href="/register">
-                <Button size="sm">Register New</Button>
-              </Link>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("csv")}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("json")}>
+                <FileJson className="mr-2 h-4 w-4" />
+                Export as JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ImportDialog
+            executeQuery={executeQuery}
+            initialized={initialized}
+            onImportComplete={loadPatients}
+          />
+          <Link href="/register">
+            <Button size="sm">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Register New
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          type="search"
+          placeholder="Search by name, email, or phone..."
+          className="pl-9"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Date of Birth</TableHead>
-                    <TableHead>Gender</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Registered</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Date of Birth</TableHead>
+                  <TableHead>Gender</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Registered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}>
+                        <div className="h-4 w-full rounded bg-muted animate-pulse" />
+                      </TableCell>
+                    ))}
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <TableCell key={j}>
-                          <div className="h-4 w-full rounded bg-muted animate-pulse" />
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           ) : filteredPatients.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No patients found</p>
-              {patients.length > 0 && searchTerm && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Try adjusting your search term
-                </p>
-              )}
-              {patients.length === 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-muted-foreground mb-4">
-                    No patients have been registered yet
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <Users className="h-8 w-8 text-muted-foreground" />
+              </div>
+              {patients.length === 0 ? (
+                <>
+                  <h3 className="font-semibold text-lg">No patients yet</h3>
+                  <p className="text-sm text-muted-foreground mt-1 mb-4">
+                    Get started by registering your first patient.
                   </p>
                   <Link href="/register">
-                    <Button>Register Your First Patient</Button>
+                    <Button>
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Register Your First Patient
+                    </Button>
                   </Link>
-                </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="font-semibold text-lg">No results found</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Try adjusting your search term.
+                  </p>
+                </>
               )}
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Date of Birth</TableHead>
-                    <TableHead>Gender</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Registered</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Date of Birth</TableHead>
+                  <TableHead>Gender</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Registered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPatients.map((patient) => (
+                  <TableRow
+                    key={patient.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => router.push(`/patients/${patient.id}`)}
+                  >
+                    <TableCell className="font-medium">
+                      {patient.id}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {patient.first_name} {patient.last_name}
+                    </TableCell>
+                    <TableCell>
+                      {format(new Date(patient.date_of_birth), "MMM d, yyyy")}
+                    </TableCell>
+                    <TableCell className="capitalize">
+                      {patient.gender.replace("_", " ")}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {patient.email || patient.phone || "\u2014"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(new Date(patient.created_at), "MMM d, yyyy")}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPatients.map((patient) => (
-                    <TableRow
-                      key={patient.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => router.push(`/patients/${patient.id}`)}
-                    >
-                      <TableCell className="font-medium">
-                        {patient.id}
-                      </TableCell>
-                      <TableCell>
-                        {patient.first_name} {patient.last_name}
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(patient.date_of_birth), "MMM d, yyyy")}
-                      </TableCell>
-                      <TableCell className="capitalize">
-                        {patient.gender.replace("_", " ")}
-                      </TableCell>
-                      <TableCell>
-                        {patient.email || patient.phone || "—"}
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(patient.created_at), "MMM d, yyyy")}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
