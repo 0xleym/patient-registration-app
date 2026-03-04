@@ -23,9 +23,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -63,11 +60,17 @@ function DetailRow({
   value: string | null | undefined;
 }) {
   return (
-    <div className="flex items-start gap-3 py-3">
-      <Icon className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+    <div className="flex items-start gap-4 py-4">
+      <div className="rounded-lg bg-muted p-2 shrink-0">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
       <div className="min-w-0">
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        <p className="text-sm mt-0.5">{value || "Not provided"}</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {label}
+        </p>
+        <p className="text-sm mt-0.5 font-medium">
+          {value || <span className="text-muted-foreground italic font-normal">Not provided</span>}
+        </p>
       </div>
     </div>
   );
@@ -119,7 +122,6 @@ export default function PatientDetailPage() {
     loadPatient();
   }, [loadPatient]);
 
-  // Listen for cross-tab updates
   useEffect(() => {
     const handleDatabaseUpdate = () => {
       loadPatient();
@@ -197,7 +199,6 @@ export default function PatientDetailPage() {
     }
   }
 
-  // Convert DB record to form values
   function getFormDefaults(): Partial<PatientFormValues> | undefined {
     if (!patient) return undefined;
     return {
@@ -217,7 +218,7 @@ export default function PatientDetailPage() {
       <div className="container flex items-center justify-center min-h-[80vh]">
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p>Loading patient details...</p>
+          <p className="text-muted-foreground">Loading patient details...</p>
         </div>
       </div>
     );
@@ -226,185 +227,203 @@ export default function PatientDetailPage() {
   if (!patient) {
     return (
       <div className="container flex items-center justify-center min-h-[80vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle>Patient Not Found</CardTitle>
-            <CardDescription>
+        <div className="flex flex-col items-center gap-4">
+          <div className="rounded-full bg-muted p-4">
+            <User className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <div className="text-center">
+            <h2 className="font-semibold text-lg">Patient Not Found</h2>
+            <p className="text-sm text-muted-foreground mt-1">
               No patient exists with ID {patientId}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center">
-            <Link href="/records">
-              <Button>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Records
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="container py-10">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+            </p>
+          </div>
           <Link href="/records">
-            <Button variant="ghost" size="sm">
+            <Button>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Records
             </Button>
           </Link>
-
-          {!isEditing && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-
-              <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Delete Patient</DialogTitle>
-                    <DialogDescription>
-                      Are you sure you want to delete{" "}
-                      <span className="font-semibold">
-                        {patient.first_name} {patient.last_name}
-                      </span>
-                      ? This action cannot be undone.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setDeleteDialogOpen(false)}
-                      disabled={isDeleting}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={handleDelete}
-                      disabled={isDeleting}
-                    >
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        "Delete Patient"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
-
-          {isEditing && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditing(false)}
-            >
-              <X className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-          )}
         </div>
+      </div>
+    );
+  }
 
-        {/* Content */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {isEditing
-                ? `Edit Patient: ${patient.first_name} ${patient.last_name}`
-                : `${patient.first_name} ${patient.last_name}`}
-            </CardTitle>
-            <CardDescription>
-              {isEditing
-                ? "Update the patient's information below."
-                : `Patient ID: ${patient.id} — Registered ${format(new Date(patient.created_at), "MMMM d, yyyy")}`}
-            </CardDescription>
-          </CardHeader>
+  const initials = `${patient.first_name[0]}${patient.last_name[0]}`.toUpperCase();
 
-          <CardContent>
-            {isEditing ? (
-              <PatientForm
-                defaultValues={getFormDefaults()}
-                onSubmit={handleEdit}
-                submitLabel="Save Changes"
-                submittingLabel="Saving..."
-              />
-            ) : (
-              <div className="space-y-1">
+  return (
+    <div className="container py-10 max-w-2xl mx-auto space-y-6">
+      {/* Navigation */}
+      <div className="flex items-center justify-between">
+        <Link href="/records">
+          <Button variant="ghost" size="sm" className="-ml-2">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Records
+          </Button>
+        </Link>
+
+        {!isEditing && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Delete Patient</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to delete{" "}
+                    <span className="font-semibold">
+                      {patient.first_name} {patient.last_name}
+                    </span>
+                    ? This action cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDeleteDialogOpen(false)}
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      "Delete Patient"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {isEditing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsEditing(false)}
+          >
+            <X className="mr-2 h-4 w-4" />
+            Cancel
+          </Button>
+        )}
+      </div>
+
+      {/* Patient Header */}
+      {!isEditing && (
+        <div className="flex items-center gap-4">
+          <div className="h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold shrink-0">
+            {initials}
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {patient.first_name} {patient.last_name}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Patient ID: {patient.id} &middot; Registered{" "}
+              {format(new Date(patient.created_at), "MMMM d, yyyy")}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isEditing && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Edit Patient
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Update {patient.first_name} {patient.last_name}&apos;s information below.
+          </p>
+        </div>
+      )}
+
+      {/* Content */}
+      <Card>
+        <CardContent className={isEditing ? "pt-6" : "p-0"}>
+          {isEditing ? (
+            <PatientForm
+              defaultValues={getFormDefaults()}
+              onSubmit={handleEdit}
+              submitLabel="Save Changes"
+              submittingLabel="Saving..."
+            />
+          ) : (
+            <div className="divide-y">
+              <div className="px-6">
                 <DetailRow
                   icon={User}
                   label="Full Name"
                   value={`${patient.first_name} ${patient.last_name}`}
                 />
-                <Separator />
+              </div>
+              <div className="px-6">
                 <DetailRow
                   icon={Calendar}
                   label="Date of Birth"
-                  value={format(
-                    new Date(patient.date_of_birth),
-                    "MMMM d, yyyy"
-                  )}
+                  value={format(new Date(patient.date_of_birth), "MMMM d, yyyy")}
                 />
-                <Separator />
+              </div>
+              <div className="px-6">
                 <DetailRow
                   icon={User}
                   label="Gender"
-                  value={
-                    patient.gender
-                      .replace("_", " ")
-                      .replace(/\b\w/g, (c) => c.toUpperCase())
-                  }
+                  value={patient.gender.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
                 />
-                <Separator />
+              </div>
+              <div className="px-6">
                 <DetailRow
                   icon={Mail}
                   label="Email"
                   value={patient.email}
                 />
-                <Separator />
+              </div>
+              <div className="px-6">
                 <DetailRow
                   icon={Phone}
                   label="Phone"
                   value={patient.phone}
                 />
-                <Separator />
+              </div>
+              <div className="px-6">
                 <DetailRow
                   icon={MapPin}
                   label="Address"
                   value={patient.address}
                 />
-                <Separator />
+              </div>
+              <div className="px-6">
                 <DetailRow
                   icon={FileText}
                   label="Medical History"
                   value={patient.medical_history}
                 />
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
