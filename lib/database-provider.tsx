@@ -98,6 +98,11 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           )
         `);
 
+        // Set timezone to the user's local timezone so now(), CURRENT_TIMESTAMP,
+        // and interval math all use local time instead of UTC
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        await pglite.query(`SET timezone TO '${tz}'`);
+
         initializedRef.current = true;
         setInitialized(true);
         setIsLoading(false);
